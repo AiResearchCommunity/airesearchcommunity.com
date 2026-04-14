@@ -1,0 +1,64 @@
+# 1. 定义一个简单的 Nginx Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-test
+  template:
+    metadata:
+      labels:
+        app: nginx-test
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+---
+# 2. 定义 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-test-svc
+  namespace: default
+spec:
+  selector:
+    app: nginx-test
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+# 3. 定义 Ingress 并引用 ClusterIssuer
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-test-ingress
+  namespace: default
+  annotations:
+    # 替换为你之前创建的 ClusterIssuer 名称
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # 如果你使用 Traefik，可以强制跳转 HTTPS
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts:
+        - www.airesearchcommunity.com # <--- 修改为你的真实域名
+      secretName: nginx-test-tls # 证书将存储在这个 Secret 中
+  rules:
+    - host: www.airesearchcommunity.com # <--- 修改为你的真实域名
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-test-svc
+                port:
+                  number: 80

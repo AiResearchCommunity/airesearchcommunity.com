@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: writefreely
+---
+# 1. 存储定义 (PVC)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wf-app-pvc
+  namespace: writefreely
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wf-db-pvc
+  namespace: writefreely
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 2Gi}}
+---
+# 2. 数据库服务 (MariaDB)
+apiVersion: v1
+kind: Service
+metadata:
+  name: db # 对应 Compose 中的服务名，方便 app 连接
+  namespace: writefreely
+spec:
+  ports: [{port: 3306}]
+  selector: {app: mariadb}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: writefreely-mariadb
+  namespace: writefreely
+spec:
+  selector: {matchLabels: {app: mariadb}}
+  template:
+    metadata: {labels: {app: mariadb}}
+    spec:
+      containers:
+        - name: mariadb
+          image: lscr.io/linuxserver/mariadb:latest
+          env:
+            - name: PUID
+              value: "65534"
+            - name: PGID
+              value: "65534"
+            - name: TZ
+              value: "Etc/UTC"
+            - name: MYSQL_DATABASE
+              value: "writefreely"
+            - name: MYSQL_USER
+              value: "writefreely"
+            - name: MYSQL_PASSWORD
+              value: "P@ssw0rd"
+          volumeMounts:
+            - name: db-data
+              mountPath: /config
+      volumes:
+        - name: db-data
+          persistentVolumeClaim: {claimName: wf-db-pvc}
+---
+# 3. WriteFreely 应用服务
+apiVersion: v1
+kind: Service
+metadata:
+  name: writefreely-svc
+  namespace: writefreely
+spec:
+  ports: [{port: 80, targetPort: 8080}]
+  selector: {app: writefreely}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: writefreely
+  namespace: writefreely
+spec:
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: writefreely}}
+  template:
+    metadata: {labels: {app: writefreely}}
+    spec:
+      # 为了避免权限问题，在 K3s 上建议保留这个
+      securityContext: {runAsUser: 0, fsGroup: 0}
+      containers:
+        - name: app
+          image: ghcr.io/writefreely/writefreely:main
+          ports: [{containerPort: 8080}]
+          volumeMounts:
+            - name: app-data
+              mountPath: /data # 对应 Compose 中的 ./data:/data
+      volumes:
+        - name: app-data
+          persistentVolumeClaim: {claimName: wf-app-pvc}
+---
+# 4. 路由入口 (Ingress)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: writefreely-ingress
+  namespace: writefreely
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  tls:
+    - hosts: [blog.yourdomain.com] # <--- 替换为你的域名
+      secretName: writefreely-tls
+  rules:
+    - host: blog.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: writefreely-svc
+                port: {number: 80}

@@ -1,0 +1,18 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # 证书颁发机构的服务器地址
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # 你的邮箱，用于接收过期通知
+    email: haroldtiansheng@gmail.com
+    privateKeySecretRef:
+      # 存储 ACME 账户私钥的 Secret 名称
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            # 指定使用的 Ingress Controller，例如 traefik 或 nginx
+            class: traefik

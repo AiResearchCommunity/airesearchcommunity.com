@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: writefreely
+commonLabels:
+  app: writefreely
+resources:
+  - pvc.yaml
+  - wf-deployment.yaml
+  - ingress.yaml
+  - db-deployment.yaml
+configMapGenerator:
+  - name: wf-config
+    files:
+      - config.ini
+# 关键部分：在这里指定你要求的 ghcr.io 镜像
+images:
+  - name: writefreely-image # 这是一个占位符，匹配 deployment.yaml 里的名称
+    newName: ghcr.io/writefreely/writefreely
+    newTag: main

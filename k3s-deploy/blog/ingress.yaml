@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: writefreely-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod" # 确保名称正确
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  tls:
+    - hosts:
+        - blog.airesearchcommunity.com
+      secretName: writefreely-tls
+  rules:
+    - host: blog.airesearchcommunity.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-compose-service
+                port:
+                  number: 8080
